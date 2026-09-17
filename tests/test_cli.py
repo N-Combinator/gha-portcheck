@@ -73,6 +73,15 @@ def test_invalid_yaml_exits_2_with_path_and_line(make_repo, capsys):
     assert out == ""
 
 
+def test_non_utf8_workflow_exits_2(make_repo, capsys):
+    repo = make_repo()
+    (repo / ".github/workflows/latin1.yml").write_bytes("on: [push] # caf\xe9\n".encode("latin-1"))
+    code, out, err = run(capsys, "scan", str(repo), "--target", "forgejo")
+    assert code == 2
+    assert ".github/workflows/latin1.yml: not valid UTF-8" in err
+    assert out == ""
+
+
 def test_repo_without_workflows(tmp_path, capsys):
     code, out, err = run(capsys, "scan", str(tmp_path), "--target", "gitea")
     assert code == 0

@@ -64,7 +64,7 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     try:
         findings, scanned = scan_repo(repo, args.target)
     except WorkflowParseError as exc:
-        print(f"gha-portcheck: {exc.path}:{exc.line}: {exc.detail}", file=sys.stderr)
+        print(f"gha-portcheck: {exc}", file=sys.stderr)
         return EXIT_ERROR
 
     if not scanned:

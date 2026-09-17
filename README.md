@@ -64,7 +64,7 @@ Exit codes:
 |---|---|
 | 0 | scan completed (default), or `--fail-on` threshold not reached |
 | 1 | `--fail-on error` and an error was found, or `--fail-on warning` and a warning or error was found |
-| 2 | a workflow file is not valid YAML (reported as `path:line` on stderr), the path is not a directory, or an unknown rule id was passed to `rules --explain` |
+| 2 | a workflow file is not valid YAML (reported as `path:line` on stderr) or not valid UTF-8 (reported as `path: not valid UTF-8`), the path is not a directory, or an unknown rule id was passed to `rules --explain` |
 
 A repository without workflow files exits 0 with an empty finding list and a warning on
 stderr.

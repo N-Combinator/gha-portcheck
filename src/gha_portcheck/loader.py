@@ -18,13 +18,18 @@ WORKFLOW_SUFFIXES = (".yml", ".yaml")
 
 
 class WorkflowParseError(Exception):
-    """Raised when a workflow file is not valid YAML."""
+    """Raised when a workflow file cannot be read or is not valid YAML.
 
-    def __init__(self, path: str, line: int, detail: str) -> None:
+    ``line`` is ``None`` when the problem has no position, such as a file that
+    is not UTF-8 at all.
+    """
+
+    def __init__(self, path: str, line: int | None, detail: str) -> None:
         self.path = path
         self.line = line
         self.detail = detail
-        super().__init__(f"{path}:{line}: {detail}")
+        location = path if line is None else f"{path}:{line}"
+        super().__init__(f"{location}: {detail}")
 
 
 @dataclass(frozen=True)
@@ -59,7 +64,10 @@ def load(path: Path, display_path: str | None = None) -> Workflow:
     tag-free YAML is accepted (``SafeLoader`` refuses arbitrary Python tags).
     """
     shown = display_path or str(path)
-    text = path.read_text(encoding="utf-8")
+    try:
+        text = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError as exc:
+        raise WorkflowParseError(shown, None, "not valid UTF-8") from exc
     try:
         data = yaml.safe_load(text)
     except yaml.YAMLError as exc:
