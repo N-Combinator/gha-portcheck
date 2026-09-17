@@ -73,6 +73,16 @@ def test_artifact_v4_actions_are_not_reported_as_unknown(make_repo):
     assert by_rule(findings, "unknown-action") == []
 
 
+def test_artifact_v4_falls_back_to_unknown_on_gitea(make_repo):
+    # the rule does not apply to gitea, so the two actions were not checked by
+    # anything and have to be reported as unknown rather than disappear
+    findings = scan(make_repo("b-artifacts.yml"), "gitea")
+    unknown = by_rule(findings, "unknown-action")
+    assert [(f.step, f.severity) for f in unknown] == [(0, "info"), (1, "info")]
+    assert "actions/upload-artifact" in unknown[0].message
+    assert "actions/download-artifact" in unknown[1].message
+
+
 @pytest.mark.parametrize(
     "step, uses",
     [(0, "https://github.com/actions/upload-artifact@v4"), (1, "github.com/actions/download-artifact@v4")],
@@ -149,6 +159,16 @@ def test_container_with_js_action(make_repo, target):
     assert "node" in hits[0].message
 
 
+@pytest.mark.parametrize("target", ["forgejo", "gitea"])
+def test_container_with_a_mirrored_js_action(make_repo, target):
+    # actions/* mirrored on another forge is still a JavaScript action
+    findings = scan(make_repo("container-mirror.yml"), target)
+    hits = by_rule(findings, "container-js-action-node")
+    assert [f.step for f in hits] == [0, 1]
+    assert "code.forgejo.org/actions/checkout@v4" in hits[0].message
+    assert "gitea.com/actions/setup-node@v4" in hits[1].message
+
+
 def test_js_action_without_container_is_not_flagged(make_repo):
     findings = scan(make_repo("b-artifacts.yml"), "forgejo")
     assert by_rule(findings, "container-js-action-node") == []
@@ -160,6 +180,14 @@ def test_js_action_without_container_is_not_flagged(make_repo):
 @pytest.mark.parametrize("target", ["forgejo", "gitea"])
 def test_github_api_in_run_steps(make_repo, target):
     findings = scan(make_repo("h-gh-api.yml"), target)
+    hits = by_rule(findings, "github-api-in-run")
+    assert [f.step for f in hits] == [0, 1]
+    assert {f.severity for f in hits} == {"warning"}
+
+
+@pytest.mark.parametrize("target", ["forgejo", "gitea"])
+def test_gh_cli_behind_a_quote(make_repo, target):
+    findings = scan(make_repo("gh-quoted.yml"), target)
     hits = by_rule(findings, "github-api-in-run")
     assert [f.step for f in hits] == [0, 1]
     assert {f.severity for f in hits} == {"warning"}

@@ -1,0 +1,8 @@
+name: gh-quoted
+on: [push]
+jobs:
+  report:
+    runs-on: self-hosted
+    steps:
+      - run: bash -c "gh api /repos/${{ github.repository }}"
+      - run: sh -c 'gh release list'

@@ -15,15 +15,20 @@ ON_KEYS = ("on", True)
 
 GITHUB_HOSTED_LABEL_RE = re.compile(r"^(ubuntu|macos|windows)-|-arm$", re.IGNORECASE)
 MATRIX_REF_RE = re.compile(r"\$\{\{\s*matrix\.([A-Za-z0-9_-]+)\s*\}\}")
-# ``uses:`` may be written as an absolute URL; only github.com is the implicit
-# default host, so only that prefix is stripped before matching action names.
-GITHUB_URL_PREFIX_RE = re.compile(r"^(?:https?://)?(?:www\.)?github\.com/", re.IGNORECASE)
+# ``uses:`` may be written as an absolute URL on any forge; the scheme and the
+# host are split off so that a rule can decide whether it cares about the host.
+USES_SCHEME_RE = re.compile(r"^https?://", re.IGNORECASE)
+HOSTNAME_RE = re.compile(r"^[A-Za-z0-9.-]+(?::\d+)?$")
+GITHUB_HOST = "github.com"
 
 # a matrix reference expands to at most this many labels, and nested references
 # are followed at most this deep, so that a self-referencing matrix terminates
 MAX_MATRIX_LABELS = 64
 MAX_MATRIX_DEPTH = 8
-GH_CLI_RE = re.compile(r"(?:^|[ \t;&|(`$])gh[ \t]+[a-z]", re.MULTILINE)
+# the gh invocation may start a line, follow a shell separator, or sit right
+# behind a quote (``bash -c "gh api ..."``); the separator class must stay on
+# one line, so it lists space and tab rather than \s.
+GH_CLI_RE = re.compile(r"""(?:^|[ \t;&|(`$'"])gh[ \t]+[a-z]""", re.MULTILINE)
 
 ARTIFACT_V4_RE = re.compile(r"^actions/(upload|download)-artifact@v4(\.|$)", re.IGNORECASE)
 
@@ -37,7 +42,9 @@ GITHUB_ONLY_ACTIONS = (
     ("actions/configure-pages", "github-only-pages"),
 )
 
-# actions/* are JavaScript actions: inside a job container they need node in the image
+# actions/* are JavaScript actions: inside a job container they need node in the
+# image. The owner decides, not the host: Forgejo and Gitea mirror these actions
+# (code.forgejo.org/actions/checkout, gitea.com/actions/checkout) unchanged.
 JS_ACTION_PREFIX = "actions/"
 
 
@@ -83,10 +90,11 @@ class _Emitter:
         job: str | None = None,
         step: int | None = None,
         **fmt: object,
-    ) -> None:
+    ) -> bool:
+        """Record a finding; return whether the rule applies to this target."""
         rule = self.catalogue[rule_id]
         if not rule.applies_to(self.target):
-            return
+            return False
         self.findings.append(
             Finding(
                 file=file,
@@ -99,6 +107,7 @@ class _Emitter:
                 source_url=rule.source_url,
             )
         )
+        return True
 
 
 def scan_repo(repo: Path, target: str) -> tuple[list[Finding], list[str]]:
@@ -260,35 +269,50 @@ def _check_uses(
     written = uses.strip()  # as it appears in the workflow, for the message
     if written.startswith("./") or written.startswith("../"):
         return
-    ref = _normalise_action(written)
+    host, ref = _normalise_action(written)
     action = ref.split("@", 1)[0]
+    on_github = host == GITHUB_HOST
 
+    # A rule only counts as covering the action when it fired: a rule that does
+    # not apply to this target leaves the action unchecked, so it has to fall
+    # through to unknown-action rather than silently disappear.
     covered = False
-    if ARTIFACT_V4_RE.match(ref):
-        covered = True
-        emitter.emit("artifact-actions-v4", file, job=job, step=step, uses=written)
+    # The v4 artifact rule is github.com-only on purpose: the same path on
+    # another forge is the patched fork its own fix hint recommends.
+    if on_github and ARTIFACT_V4_RE.match(ref):
+        covered = emitter.emit("artifact-actions-v4", file, job=job, step=step, uses=written)
     for prefix, rule_id in GITHUB_ONLY_ACTIONS:
+        # these talk to a GitHub service, so a mirror on another host is no better
         if action == prefix or action.startswith(prefix + "/"):
-            covered = True
-            emitter.emit(rule_id, file, job=job, step=step, uses=written)
+            covered = emitter.emit(rule_id, file, job=job, step=step, uses=written) or covered
             break
 
     if in_container and action.startswith(JS_ACTION_PREFIX):
         emitter.emit("container-js-action-node", file, job=job, step=step, uses=written)
 
-    if not covered and action not in seen_unknown:
-        seen_unknown.add(action)
-        emitter.emit("unknown-action", file, job=job, step=step, action=action)
+    key = action if on_github else f"{host}/{action}"
+    if not covered and key not in seen_unknown:
+        seen_unknown.add(key)
+        emitter.emit("unknown-action", file, job=job, step=step, action=key)
 
 
-def _normalise_action(uses: str) -> str:
-    """Strip the scheme and the implicit ``github.com/`` host from a ``uses:``.
+def _normalise_action(uses: str) -> tuple[str, str]:
+    """Split a ``uses:`` into its host and its ``owner/repo[/path][@ref]`` part.
 
-    ``https://github.com/actions/checkout@v4`` and ``github.com/actions/checkout@v4``
-    both mean ``actions/checkout@v4``; any other host is kept as written, because
-    it refers to a different forge.
+    ``https://github.com/actions/checkout@v4``, ``github.com/actions/checkout@v4``
+    and the bare ``actions/checkout@v4`` all give ``("github.com", "actions/checkout@v4")``;
+    ``https://code.forgejo.org/actions/checkout@v4`` gives that host with the same
+    path, so a rule can match on the action itself and still tell the forges apart.
     """
-    return GITHUB_URL_PREFIX_RE.sub("", uses)
+    ref = uses
+    scheme = USES_SCHEME_RE.match(ref)
+    if scheme:
+        ref = ref[scheme.end() :]
+    head, sep, rest = ref.partition("/")
+    if sep and (scheme or "." in head) and HOSTNAME_RE.match(head):
+        host = head.lower().removeprefix("www.")
+        return host, rest
+    return GITHUB_HOST, ref
 
 
 def _check_run(run: str, file: str, job: str, step: int, emitter: _Emitter) -> None:
