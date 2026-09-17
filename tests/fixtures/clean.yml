@@ -1,0 +1,9 @@
+name: clean
+on: [push]
+jobs:
+  build:
+    runs-on: self-hosted
+    steps:
+      - uses: ./.forgejo/actions/setup
+      - uses: some-org/some-action@v2
+      - run: make test

@@ -1,0 +1,129 @@
+{
+  "version": 1,
+  "targets_documented": {
+    "forgejo": "Forgejo v16.0 documentation (forgejo.org/docs/latest)",
+    "gitea": "Gitea 1.27 documentation (docs.gitea.com)"
+  },
+  "rules": [
+    {
+      "id": "runs-on-github-hosted-label",
+      "targets": ["forgejo", "gitea"],
+      "severity": "warning",
+      "message": "runs-on label '{label}' is a GitHub-hosted runner label; Forgejo and Gitea runners only carry the labels they were registered with, and a label maps to whatever image the admin mapped it to. On Forgejo a job whose label no runner declares waits until such a runner appears; Gitea's runner falls back to its own default image, which is not GitHub's.",
+      "fix_hint": "Use a label your runner declares (often `docker` or `self-hosted`), or register a runner with this label and an image that provides the tools the job expects; do not assume GitHub's preinstalled software.",
+      "source_url": "https://forgejo.org/docs/latest/user/actions/reference/#jobsjob_idruns-on",
+      "see_also": [
+        "https://docs.gitea.com/runner/labels",
+        "https://docs.gitea.com/usage/actions/design#gitea-runner"
+      ]
+    },
+    {
+      "id": "artifact-actions-v4",
+      "targets": ["forgejo"],
+      "severity": "error",
+      "message": "`{uses}` uses the v4 artifact API; the Forgejo documentation requires v3 (or the patched v4 fork) for the upload and download artifact actions.",
+      "fix_hint": "Pin `actions/upload-artifact@v3` / `actions/download-artifact@v3`, use the patched v4 fork linked from the Forgejo artifacts documentation, or publish the files another way (package registry, release asset).",
+      "source_url": "https://forgejo.org/docs/latest/user/actions/advanced-features/#artifacts",
+      "see_also": ["https://github.com/go-gitea/gitea/releases/tag/v1.22.0"]
+    },
+    {
+      "id": "github-only-codeql",
+      "targets": ["forgejo", "gitea"],
+      "severity": "error",
+      "message": "`{uses}` analyses code and uploads the results to GitHub code scanning. Forgejo has no security-report storage and Gitea does not support the `security-events` token scope, so the upload has nowhere to go.",
+      "fix_hint": "Drop the step, or run an analyser that writes a report you keep as a job artifact (SARIF can be stored as a file even where no forge consumes it).",
+      "source_url": "https://codeberg.org/forgejo/forgejo/issues/12667",
+      "see_also": [
+        "https://docs.gitea.com/usage/actions/token-permissions#compatibility-notes",
+        "https://github.com/github/codeql-action"
+      ]
+    },
+    {
+      "id": "github-only-attestations",
+      "targets": ["forgejo", "gitea"],
+      "severity": "error",
+      "message": "`{uses}` signs a build with a GitHub OIDC token and uploads the result to the GitHub attestations API. Gitea Actions does not support the `id-token` scope the action asks for, and Forgejo has no attestation store to upload to: this is a GitHub-only service, no Forgejo/Gitea equivalent documented.",
+      "fix_hint": "Sign and publish provenance yourself (for example cosign with a key stored as a secret) and attach it as an artifact or release asset, or drop the step.",
+      "source_url": "https://docs.gitea.com/usage/actions/token-permissions#compatibility-notes",
+      "see_also": ["https://github.com/actions/attest-build-provenance"]
+    },
+    {
+      "id": "github-only-pages",
+      "targets": ["forgejo", "gitea"],
+      "severity": "error",
+      "message": "`{uses}` publishes to GitHub Pages. Forgejo has no built-in Pages service and Gitea does not support the `pages` token scope, so the deployment cannot happen.",
+      "fix_hint": "Publish the site another way: push the built files to a pages branch served by your forge's static hosting, or deploy to an external host over SSH/rsync with a secret.",
+      "source_url": "https://codeberg.org/forgejo/forgejo/issues/2708",
+      "see_also": [
+        "https://docs.gitea.com/usage/actions/token-permissions#compatibility-notes",
+        "https://github.com/actions/deploy-pages"
+      ]
+    },
+    {
+      "id": "oidc-id-token",
+      "targets": ["forgejo", "gitea"],
+      "severity": "warning",
+      "message": "`permissions: id-token: write` asks GitHub for an OIDC token. Forgejo ignores the job `permissions` key and spells this `enable-openid-connect: true` instead; Gitea does not support the `id-token` scope at all, so any step exchanging the token for cloud credentials fails.",
+      "fix_hint": "On Forgejo set `enable-openid-connect: true` on the job and re-check the issuer and audience your cloud provider trusts; on Gitea replace the OIDC login with a long-lived credential stored as a secret.",
+      "source_url": "https://forgejo.org/docs/latest/user/actions/github-actions/#known-list-of-differences",
+      "see_also": [
+        "https://docs.gitea.com/usage/actions/token-permissions#compatibility-notes",
+        "https://github.com/go-gitea/gitea/issues/26383"
+      ]
+    },
+    {
+      "id": "job-environment",
+      "targets": ["gitea"],
+      "severity": "warning",
+      "message": "job-level `environment:` is listed as unsupported workflow syntax and ignored by Gitea Actions: there are no deployment environments, so environment secrets, variables, protection rules and approvals do not apply.",
+      "fix_hint": "Move the environment's secrets and variables to repository or organisation level and gate the job with an `if:` condition; do not rely on the environment for manual approval.",
+      "source_url": "https://docs.gitea.com/usage/actions/comparison#jobsjob_idenvironment",
+      "see_also": ["https://github.com/go-gitea/gitea/issues/30079"]
+    },
+    {
+      "id": "pull-request-labeled-types",
+      "targets": ["forgejo", "gitea"],
+      "severity": "info",
+      "message": "`on.pull_request.types` contains {types}. Forgejo and Gitea derive these types from their own `label_updated` and `label_cleared` events: for pull requests `label_updated` is reported as `labeled` whether a label was added or removed, and `unlabeled` only arrives when the labels are cleared.",
+      "fix_hint": "Do not use the event type to tell adding from removing: trigger on `labeled` and compare the labels in the payload (or the API) inside the job.",
+      "source_url": "https://github.com/go-gitea/gitea/blob/4892a55e2915be979b892491352ecb610458dd1b/modules/actions/workflows.go#L552-L570",
+      "see_also": [
+        "https://codeberg.org/forgejo/forgejo/src/commit/df600c18162beb2156c4977e84e0b7131c2938f8/modules/actions/workflows.go#L456-L474",
+        "https://forgejo.org/docs/latest/user/actions/reference/#onpull_request"
+      ]
+    },
+    {
+      "id": "container-js-action-node",
+      "targets": ["forgejo", "gitea"],
+      "severity": "warning",
+      "message": "the job runs in a `container:` and uses the JavaScript action `{uses}`; the runner executes JavaScript actions with the node binary inside that image, so an image without node breaks the step.",
+      "fix_hint": "Use an image that ships node, add node to your image, or replace the action with a `run:` step.",
+      "source_url": "https://forgejo.org/docs/latest/user/actions/reference/#jobsjob_idcontainerimage",
+      "see_also": [
+        "https://forum.gitea.com/t/use-actions-checkout-v3-in-a-container-without-node-installed/8406",
+        "https://github.com/go-gitea/gitea/issues/32346"
+      ]
+    },
+    {
+      "id": "github-api-in-run",
+      "targets": ["forgejo", "gitea"],
+      "severity": "warning",
+      "message": "the step reaches GitHub through {what}. Inside a Forgejo or Gitea job, `GITHUB_API_URL` and `github.api_url` point at the forge's own Gitea-compatible REST API, the job token is not a github.com token, and Gitea leaves `GITHUB_GRAPHQL_URL` empty because it has no GraphQL API (which the gh CLI relies on).",
+      "fix_hint": "Call the forge API at `${{ github.api_url }}` (`$GITHUB_API_URL`) with the job token, or replace the gh CLI with `tea` or plain `curl`; keep the hard-coded api.github.com call only where you really mean github.com and pass a github.com token.",
+      "source_url": "https://docs.gitea.com/usage/actions/actions-variables#environment-variables",
+      "see_also": [
+        "https://forgejo.org/docs/latest/user/actions/reference/#github",
+        "https://github.com/cli/cli"
+      ]
+    },
+    {
+      "id": "unknown-action",
+      "targets": ["forgejo", "gitea"],
+      "severity": "info",
+      "message": "portability unknown: `{action}` is not covered by a rule, so nothing about it has been checked. The forge resolves a bare `uses:` against its configured actions host, and what the action does at runtime (GitHub API calls, GitHub-only tooling) is invisible to a static check.",
+      "fix_hint": "Make sure the action is reachable from your instance (an absolute `uses:` URL works where the default host is not), and read it for github.com API calls before relying on it.",
+      "source_url": "https://docs.gitea.com/usage/actions/comparison#downloading-actions",
+      "see_also": ["https://forgejo.org/docs/latest/user/actions/github-actions/#known-list-of-differences"]
+    }
+  ]
+}

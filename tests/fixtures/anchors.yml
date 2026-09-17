@@ -1,0 +1,12 @@
+name: anchors
+on: [push]
+x-runner: &runner ubuntu-latest
+x-steps: &steps
+  - run: echo shared
+jobs:
+  one:
+    runs-on: *runner
+    steps: *steps
+  two:
+    runs-on: *runner
+    steps: *steps

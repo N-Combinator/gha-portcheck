@@ -1,0 +1,10 @@
+name: h-gh-api
+on: [push]
+jobs:
+  report:
+    runs-on: self-hosted
+    steps:
+      - run: curl -s https://api.github.com/repos/${{ github.repository }}/releases
+      - run: |
+          set -e
+          gh pr list --limit 5

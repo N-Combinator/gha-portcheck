@@ -1,0 +1,11 @@
+name: container-mirror
+on: [push]
+jobs:
+  build:
+    runs-on: self-hosted
+    container:
+      image: alpine:3.20
+    steps:
+      - uses: https://code.forgejo.org/actions/checkout@v4
+      - uses: gitea.com/actions/setup-node@v4
+      - run: echo build

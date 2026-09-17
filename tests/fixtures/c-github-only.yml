@@ -1,0 +1,12 @@
+name: c-github-only
+on: [push]
+jobs:
+  analyze:
+    runs-on: self-hosted
+    steps:
+      - uses: github/codeql-action/init@v3
+      - uses: github/codeql-action/analyze@v3
+      - uses: actions/attest-build-provenance@v1
+      - uses: actions/attest-sbom@v2
+      - uses: actions/attest@v2
+      - uses: actions/deploy-pages@v4

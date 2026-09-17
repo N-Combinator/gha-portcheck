@@ -1,0 +1,19 @@
+name: a-runs-on
+on: [push]
+jobs:
+  hosted:
+    runs-on: ubuntu-22.04
+    steps:
+      - run: echo hosted
+  mac:
+    runs-on: macos-latest
+    steps:
+      - run: echo mac
+  arm:
+    runs-on: ubuntu-22.04-arm
+    steps:
+      - run: echo arm
+  self:
+    runs-on: self-hosted
+    steps:
+      - run: echo self
