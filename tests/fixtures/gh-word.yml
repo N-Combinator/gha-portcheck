@@ -8,3 +8,10 @@ jobs:
           echo the digraph gh
           status=ok
           echo "$status"
+      - run: |
+          echo high water mark
+          echo weight: 1
+          docker pull ghcr.io/x
+          docker build -t ghcr.io/o/i:gh-pages .
+          ./gh api /meta
+          tools/gh version

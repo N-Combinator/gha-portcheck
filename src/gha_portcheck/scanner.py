@@ -25,10 +25,14 @@ GITHUB_HOST = "github.com"
 # are followed at most this deep, so that a self-referencing matrix terminates
 MAX_MATRIX_LABELS = 64
 MAX_MATRIX_DEPTH = 8
-# the gh invocation may start a line, follow a shell separator, or sit right
-# behind a quote (``bash -c "gh api ..."``); the separator class must stay on
-# one line, so it lists space and tab rather than \s.
-GH_CLI_RE = re.compile(r"""(?:^|[ \t;&|(`$'"])gh[ \t]+[a-z]""", re.MULTILINE)
+# ``gh`` as a whole word followed by an argument on the same line: anything that
+# is not a word character, ``.``, ``/`` or ``-`` may precede it (start of string,
+# a shell separator, a quote in ``bash -c "gh api ..."``, an assignment prefix in
+# ``GH_TOKEN=x gh auth status``), and the argument may be a flag, an upper-case
+# word or a variable.  The excluded prefixes keep ``high``, ``weight``, ``./gh``
+# and ``dir/gh`` out; requiring a space or tab right after keeps ``ghcr.io`` and
+# ``gh-pages`` out.  The separators stay on one line, hence [ \t] rather than \s.
+GH_CLI_RE = re.compile(r"(?<![\w./-])gh[ \t]+\S")
 
 ARTIFACT_V4_RE = re.compile(r"^actions/(upload|download)-artifact@v4(\.|$)", re.IGNORECASE)
 

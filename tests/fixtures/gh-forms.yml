@@ -1,0 +1,10 @@
+name: gh-forms
+on: [push]
+jobs:
+  report:
+    runs-on: self-hosted
+    steps:
+      - run: gh --version
+      - run: GH_TOKEN=x gh auth status
+      - run: gh API-does-not-exist || true
+      - run: $CMD && gh $SUBCOMMAND

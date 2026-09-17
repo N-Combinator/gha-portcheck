@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from gha_portcheck.loader import WorkflowParseError
-from gha_portcheck.scanner import scan_repo
+from gha_portcheck.scanner import GH_CLI_RE, scan_repo
 
 
 def rule_ids(findings):
@@ -193,9 +193,51 @@ def test_gh_cli_behind_a_quote(make_repo, target):
     assert {f.severity for f in hits} == {"warning"}
 
 
-def test_gh_at_the_end_of_a_line_is_not_a_gh_call(make_repo):
+@pytest.mark.parametrize("target", ["forgejo", "gitea"])
+def test_gh_cli_with_flags_env_prefix_and_variables(make_repo, target):
+    findings = scan(make_repo("gh-forms.yml"), target)
+    hits = by_rule(findings, "github-api-in-run")
+    assert [f.step for f in hits] == [0, 1, 2, 3]
+    assert {f.severity for f in hits} == {"warning"}
+
+
+def test_words_containing_gh_are_not_a_gh_call(make_repo):
     findings = scan(make_repo("gh-word.yml"), "forgejo")
     assert by_rule(findings, "github-api-in-run") == []
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "gh api /repos/o/r",
+        'bash -c "gh pr list"',
+        "gh --version",
+        "GH_TOKEN=x gh auth status",
+        "gh\tapi /meta",
+        "x=$(gh api /meta)",
+        "gh $SUBCOMMAND",
+    ],
+)
+def test_gh_cli_regex_matches(line):
+    assert GH_CLI_RE.search(line)
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "high",
+        "echo high water",
+        "ghcr.io/x",
+        "docker pull ghcr.io/o/i",
+        "weight: 1",
+        "gh-pages is a branch",
+        "./gh api /meta",
+        "tools/gh api /meta",
+        "the digraph gh\napi",
+    ],
+)
+def test_gh_cli_regex_does_not_match(line):
+    assert GH_CLI_RE.search(line) is None
 
 
 def test_plain_run_steps_are_not_flagged(make_repo):
