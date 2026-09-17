@@ -36,11 +36,14 @@ GH_CLI_RE = re.compile(r"(?<![\w./-])gh[ \t]+\S")
 
 ARTIFACT_V4_RE = re.compile(r"^actions/(upload|download)-artifact@v4(\.|$)", re.IGNORECASE)
 
-# action reference prefix -> rule id, for actions backed by a GitHub-only service
+# action reference -> rule id, for actions backed by a GitHub-only service.  A
+# pattern ending in ``*`` matches every repository whose name starts with it
+# (``actions/attest``, ``actions/attest-build-provenance``, ``actions/attest-sbom``);
+# without it the pattern matches the action itself and the sub-path actions in the
+# same repository (``github/codeql-action/init``).
 GITHUB_ONLY_ACTIONS = (
     ("github/codeql-action", "github-only-codeql"),
-    ("actions/attest-build-provenance", "github-only-attestations"),
-    ("actions/attest", "github-only-attestations"),
+    ("actions/attest*", "github-only-attestations"),
     ("actions/deploy-pages", "github-only-pages"),
     ("actions/upload-pages-artifact", "github-only-pages"),
     ("actions/configure-pages", "github-only-pages"),
@@ -285,9 +288,9 @@ def _check_uses(
     # another forge is the patched fork its own fix hint recommends.
     if on_github and ARTIFACT_V4_RE.match(ref):
         covered = emitter.emit("artifact-actions-v4", file, job=job, step=step, uses=written)
-    for prefix, rule_id in GITHUB_ONLY_ACTIONS:
+    for pattern, rule_id in GITHUB_ONLY_ACTIONS:
         # these talk to a GitHub service, so a mirror on another host is no better
-        if action == prefix or action.startswith(prefix + "/"):
+        if _matches_action(action, pattern):
             covered = emitter.emit(rule_id, file, job=job, step=step, uses=written) or covered
             break
 
@@ -298,6 +301,13 @@ def _check_uses(
     if not covered and key not in seen_unknown:
         seen_unknown.add(key)
         emitter.emit("unknown-action", file, job=job, step=step, action=key)
+
+
+def _matches_action(action: str, pattern: str) -> bool:
+    """Match an ``owner/repo[/path]`` action against a GITHUB_ONLY_ACTIONS pattern."""
+    if pattern.endswith("*"):
+        return action.startswith(pattern[:-1])
+    return action == pattern or action.startswith(pattern + "/")
 
 
 def _normalise_action(uses: str) -> tuple[str, str]:

@@ -114,6 +114,15 @@ def test_github_only_services_are_errors(make_repo, target):
     assert by_rule(findings, "unknown-action") == []
 
 
+@pytest.mark.parametrize("target", ["forgejo", "gitea"])
+def test_every_attest_action_is_an_error(make_repo, target):
+    """The rule covers the whole actions/attest* family, not only the v1 action."""
+    findings = scan(make_repo("c-github-only.yml"), target)
+    hits = by_rule(findings, "github-only-attestations")
+    assert [f.step for f in hits] == [2, 3, 4]
+    assert "actions/attest-sbom@v2" in hits[1].message
+
+
 # --- (d) OIDC ---------------------------------------------------------------
 
 
