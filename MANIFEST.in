@@ -1,0 +1,5 @@
+# setuptools puts tests/test_*.py into the sdist on its own, which is useless
+# without the fixtures and the conftest they need; ship the whole suite so that
+# `pip install ".[dev]" && pytest -q` works in an unpacked sdist (CI checks it).
+include LICENSE
+recursive-include tests *.py *.yml *.yaml

@@ -26,6 +26,10 @@ $ pip install https://github.com/N-Combinator/gha-portcheck/releases/download/v0
 
 Python ≥ 3.10; the only runtime dependency is PyYAML.
 
+The sdist attached to each release ships the test suite and its fixtures, so
+`pip install ".[dev]" && pytest -q` inside an unpacked sdist passes; CI builds the sdist
+and runs the tests from it on every pull request.
+
 ## Usage
 
 ```console

@@ -26,6 +26,13 @@ jobs:
           test "$tag" = "$version"
       - name: Build sdist and wheel
         run: python -m build
+      - name: Test the sdist that will be attached
+        run: |
+          mkdir /tmp/sdist
+          tar xzf dist/*.tar.gz -C /tmp/sdist --strip-components=1
+          cd /tmp/sdist
+          pip install ".[dev]"
+          pytest -q
       - uses: softprops/action-gh-release@v2
         with:
           files: |
