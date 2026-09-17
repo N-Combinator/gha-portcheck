@@ -40,6 +40,12 @@ $ gha-portcheck rules --explain artifact-actions-v4
 `.forgejo/workflows/` and `.gitea/workflows/` when those directories exist. YAML is
 parsed with PyYAML's safe loader, so anchors and aliases are resolved.
 
+An absolute `uses:` URL (`https://code.forgejo.org/actions/checkout@v4`) is split into
+its host and its `owner/repo`, so rules match the action wherever it is mirrored. The
+two exceptions are deliberate: `artifact-actions-v4` only fires for actions resolved on
+github.com, because the same path on another forge is the patched fork its fix hint
+recommends, and an action outside github.com is reported under its full host.
+
 Findings are printed as a JSON list (`--format json`, the default) or as a table
 (`--format markdown`), sorted by file, job, step and rule:
 
@@ -81,7 +87,7 @@ page does not cover both.
 | `runs-on-github-hosted-label` | forgejo, gitea | warning | `runs-on:` values such as `ubuntu-latest`, `macos-14`, `windows-2022`, `*-arm`, including values reachable through `strategy.matrix` lists and `include` | [Forgejo runs-on reference](https://forgejo.org/docs/latest/user/actions/reference/#jobsjob_idruns-on), [Gitea runner labels](https://docs.gitea.com/runner/labels) |
 | `artifact-actions-v4` | forgejo | error | `actions/upload-artifact@v4`, `actions/download-artifact@v4` | [Forgejo artifacts docs](https://forgejo.org/docs/latest/user/actions/advanced-features/#artifacts), [Gitea 1.22 release notes](https://github.com/go-gitea/gitea/releases/tag/v1.22.0) |
 | `github-only-codeql` | forgejo, gitea | error | `github/codeql-action/*` (GitHub code scanning) | [Forgejo issue #12667](https://codeberg.org/forgejo/forgejo/issues/12667), [Gitea token permissions](https://docs.gitea.com/usage/actions/token-permissions#compatibility-notes) |
-| `github-only-attestations` | forgejo, gitea | error | `actions/attest-build-provenance`, other `actions/attest*` | [attest-build-provenance](https://github.com/actions/attest-build-provenance), [Gitea token permissions](https://docs.gitea.com/usage/actions/token-permissions#compatibility-notes) |
+| `github-only-attestations` | forgejo, gitea | error | `actions/attest-build-provenance`, other `actions/attest*` | [Gitea token permissions](https://docs.gitea.com/usage/actions/token-permissions#compatibility-notes), [attest-build-provenance](https://github.com/actions/attest-build-provenance) |
 | `github-only-pages` | forgejo, gitea | error | `actions/deploy-pages`, `actions/upload-pages-artifact`, `actions/configure-pages` | [Forgejo issue #2708](https://codeberg.org/forgejo/forgejo/issues/2708), [Gitea token permissions](https://docs.gitea.com/usage/actions/token-permissions#compatibility-notes) |
 | `oidc-id-token` | forgejo, gitea | warning | `permissions:` with `id-token: write` | [Forgejo differences](https://forgejo.org/docs/latest/user/actions/github-actions/#known-list-of-differences), [Gitea token permissions](https://docs.gitea.com/usage/actions/token-permissions#compatibility-notes) |
 | `job-environment` | gitea | warning | job-level `environment:` | [Gitea comparison](https://docs.gitea.com/usage/actions/comparison#jobsjob_idenvironment) |
@@ -90,10 +96,16 @@ page does not cover both.
 | `github-api-in-run` | forgejo, gitea | warning | a `run:` step containing `api.github.com` or invoking `gh` | [Gitea actions variables](https://docs.gitea.com/usage/actions/actions-variables#environment-variables), [Forgejo github context](https://forgejo.org/docs/latest/user/actions/reference/#github) |
 | `unknown-action` | forgejo, gitea | info | every other `uses:` (local `./` actions excluded), once per action | [Gitea: downloading actions](https://docs.gitea.com/usage/actions/comparison#downloading-actions), [Forgejo differences](https://forgejo.org/docs/latest/user/actions/github-actions/#known-list-of-differences) |
 
-Two notes on rules that are deliberately target-specific or surprising:
+Notes on rules that are deliberately target-specific or surprising:
 
 - `artifact-actions-v4` is a Forgejo-only error because Gitea implements the v4 artifact
-  backend since [1.22](https://github.com/go-gitea/gitea/releases/tag/v1.22.0).
+  backend since [1.22](https://github.com/go-gitea/gitea/releases/tag/v1.22.0). On
+  `--target gitea` the two actions are therefore reported as `unknown-action`: no rule
+  applicable to that target checked them.
+- `github-only-attestations` is sourced from the Gitea page that lists `id-token` among
+  the scopes Gitea Actions does not support, which is the token the action asks for.
+  Neither forge documents an attestation store at all, so the message says in as many
+  words that this is a GitHub-only service with no documented equivalent.
 - `pull-request-labeled-types` exists because both forges derive the GitHub type names
   from their own `label_updated`/`label_cleared` events: on a pull request, `labeled`
   fires for label removals too and `unlabeled` only arrives when the labels are cleared.

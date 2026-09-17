@@ -42,10 +42,10 @@
       "id": "github-only-attestations",
       "targets": ["forgejo", "gitea"],
       "severity": "error",
-      "message": "`{uses}` signs a build with a GitHub OIDC token and uploads the result to the GitHub attestations API; neither the token nor that API exists on Forgejo or Gitea.",
+      "message": "`{uses}` signs a build with a GitHub OIDC token and uploads the result to the GitHub attestations API. Gitea Actions does not support the `id-token` scope the action asks for, and Forgejo has no attestation store to upload to: this is a GitHub-only service, no Forgejo/Gitea equivalent documented.",
       "fix_hint": "Sign and publish provenance yourself (for example cosign with a key stored as a secret) and attach it as an artifact or release asset, or drop the step.",
-      "source_url": "https://github.com/actions/attest-build-provenance",
-      "see_also": ["https://docs.gitea.com/usage/actions/token-permissions#compatibility-notes"]
+      "source_url": "https://docs.gitea.com/usage/actions/token-permissions#compatibility-notes",
+      "see_also": ["https://github.com/actions/attest-build-provenance"]
     },
     {
       "id": "github-only-pages",

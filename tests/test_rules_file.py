@@ -22,6 +22,18 @@ ALLOWED_HOSTS = {
     "forum.gitea.com",
 }
 
+# Hosts that belong to Forgejo or Gitea themselves; a source on one of these
+# describes the behaviour on the target rather than on GitHub.
+FORGE_HOSTS = {"forgejo.org", "codeberg.org", "docs.gitea.com", "gitea.com", "forum.gitea.com"}
+
+# github.com paths that are still an upstream Forgejo/Gitea source (issue, PR,
+# release notes or the code itself), not GitHub's own documentation.
+UPSTREAM_GITHUB_PREFIXES = ("/go-gitea/", "/forgejo/")
+
+# What a rule has to say in its message when no Forgejo/Gitea page documents the
+# gap at all, so a reader is not left with a github.com link and no explanation.
+GITHUB_ONLY_DISCLOSURE = "GitHub-only service, no Forgejo/Gitea equivalent documented"
+
 RAW = json.loads(rules_mod.rules_json_text())
 ENTRIES = RAW["rules"]
 
@@ -48,6 +60,25 @@ def test_rule_source_url(entry):
         url = urlparse(candidate)
         assert url.scheme == "https", candidate
         assert url.hostname in ALLOWED_HOSTS, candidate
+
+
+@pytest.mark.parametrize("entry", ENTRIES, ids=[e["id"] for e in ENTRIES])
+def test_primary_source_covers_forgejo_or_gitea(entry):
+    """The source_url has to state the behaviour on the target, not on GitHub."""
+    url = urlparse(entry["source_url"])
+    if url.hostname in FORGE_HOSTS:
+        return
+    assert url.hostname == "github.com", entry["id"]
+    if url.path.startswith(UPSTREAM_GITHUB_PREFIXES):
+        return
+    assert GITHUB_ONLY_DISCLOSURE in entry["message"], entry["id"]
+
+
+def test_attestations_rule_is_sourced_and_disclosed():
+    """Neither forge documents an attestation store, so the rule says so itself."""
+    rule = rules_mod.get("github-only-attestations")
+    assert urlparse(rule.source_url).hostname in FORGE_HOSTS
+    assert GITHUB_ONLY_DISCLOSURE in rule.message
 
 
 def test_required_v0_1_rules_are_present():
