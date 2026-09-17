@@ -121,3 +121,20 @@ def test_target_is_required(make_repo, capsys):
     with pytest.raises(SystemExit) as excinfo:
         main(["scan", str(make_repo("clean.yml"))])
     assert excinfo.value.code == 2
+
+
+def test_markdown_output_without_findings(tmp_path, capsys):
+    code, out, err = run(capsys, "scan", str(tmp_path), "--target", "forgejo", "--format", "markdown")
+    assert code == 0
+    assert "No findings." in out
+
+
+def test_workflow_level_permissions_are_checked(make_repo, tmp_path, capsys):
+    repo = make_repo()
+    (repo / ".github/workflows/w.yml").write_text(
+        "on: [push]\npermissions:\n  id-token: write\njobs:\n"
+        "  j:\n    runs-on: self-hosted\n    steps:\n      - run: true\n"
+    )
+    code, out, err = run(capsys, "scan", str(repo), "--target", "gitea")
+    findings = json.loads(out)
+    assert [(f["rule"], f["job"], f["step"]) for f in findings] == [("oidc-id-token", None, None)]
