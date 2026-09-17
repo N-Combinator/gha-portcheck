@@ -42,6 +42,15 @@ def test_matrix_expanded_runs_on(make_repo):
     assert labels == ["ubuntu-latest", "windows-2022"]
 
 
+def test_matrix_reference_inside_a_longer_label(make_repo):
+    findings = scan(make_repo("matrix-inline.yml"), "forgejo")
+    hits = by_rule(findings, "runs-on-github-hosted-label")
+    labels = sorted(f.message.split("'")[1] for f in hits)
+    # the reference is substituted in place; an undefined key is left as written
+    # so the literal part of the label is still matched
+    assert labels == ["macos-${{ matrix.missing }}", "ubuntu-22.04", "ubuntu-24.04"]
+
+
 def test_anchors_and_aliases_are_resolved(make_repo):
     findings = scan(make_repo("anchors.yml"), "gitea")
     hits = by_rule(findings, "runs-on-github-hosted-label")
@@ -62,6 +71,25 @@ def test_artifact_v4_is_an_error_on_forgejo_only(make_repo):
 def test_artifact_v4_actions_are_not_reported_as_unknown(make_repo):
     findings = scan(make_repo("b-artifacts.yml"), "forgejo")
     assert by_rule(findings, "unknown-action") == []
+
+
+@pytest.mark.parametrize(
+    "step, uses",
+    [(0, "https://github.com/actions/upload-artifact@v4"), (1, "github.com/actions/download-artifact@v4")],
+)
+def test_artifact_v4_behind_an_absolute_github_url(make_repo, step, uses):
+    findings = scan(make_repo("uses-url.yml"), "forgejo")
+    hits = by_rule(findings, "artifact-actions-v4")
+    assert step in [f.step for f in hits]
+    assert any(uses in f.message for f in hits)
+
+
+def test_absolute_url_actions_are_not_reported_as_unknown(make_repo):
+    findings = scan(make_repo("uses-url.yml"), "forgejo")
+    unknown = by_rule(findings, "unknown-action")
+    # only the action hosted elsewhere is unknown; it is not an actions/* rule hit
+    assert [f.step for f in unknown] == [2]
+    assert [f.step for f in by_rule(findings, "artifact-actions-v4")] == [0, 1]
 
 
 # --- (c) GitHub-only services -----------------------------------------------
@@ -137,6 +165,11 @@ def test_github_api_in_run_steps(make_repo, target):
     assert {f.severity for f in hits} == {"warning"}
 
 
+def test_gh_at_the_end_of_a_line_is_not_a_gh_call(make_repo):
+    findings = scan(make_repo("gh-word.yml"), "forgejo")
+    assert by_rule(findings, "github-api-in-run") == []
+
+
 def test_plain_run_steps_are_not_flagged(make_repo):
     findings = scan(make_repo("clean.yml"), "forgejo")
     assert by_rule(findings, "github-api-in-run") == []
@@ -197,6 +230,18 @@ def test_invalid_yaml_raises_with_line(make_repo):
         scan_repo(repo, "forgejo")
     assert excinfo.value.path == ".github/workflows/invalid.yml"
     assert excinfo.value.line == 6
+
+
+def test_file_that_is_not_utf8(make_repo):
+    repo = make_repo()
+    (repo / ".github/workflows/latin1.yml").write_bytes(
+        "on: [push]\n# caf\xe9\njobs: {}\n".encode("latin-1")
+    )
+    with pytest.raises(WorkflowParseError) as excinfo:
+        scan_repo(repo, "forgejo")
+    assert excinfo.value.path == ".github/workflows/latin1.yml"
+    assert excinfo.value.line is None
+    assert str(excinfo.value) == ".github/workflows/latin1.yml: not valid UTF-8"
 
 
 def test_repo_without_workflows(tmp_path):

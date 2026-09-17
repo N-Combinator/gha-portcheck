@@ -1,0 +1,21 @@
+name: matrix-inline
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-${{ matrix.version }}
+    strategy:
+      matrix:
+        version: ["22.04", "24.04"]
+    steps:
+      - run: echo build
+  other:
+    runs-on: runner-${{ matrix.flavour }}
+    strategy:
+      matrix:
+        flavour: [big, small]
+    steps:
+      - run: echo other
+  legacy:
+    runs-on: macos-${{ matrix.missing }}
+    steps:
+      - run: echo legacy

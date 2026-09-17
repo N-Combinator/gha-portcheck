@@ -1,0 +1,10 @@
+name: gh-word
+on: [push]
+jobs:
+  talk:
+    runs-on: self-hosted
+    steps:
+      - run: |
+          echo the digraph gh
+          status=ok
+          echo "$status"

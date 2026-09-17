@@ -15,7 +15,15 @@ ON_KEYS = ("on", True)
 
 GITHUB_HOSTED_LABEL_RE = re.compile(r"^(ubuntu|macos|windows)-|-arm$", re.IGNORECASE)
 MATRIX_REF_RE = re.compile(r"\$\{\{\s*matrix\.([A-Za-z0-9_-]+)\s*\}\}")
-GH_CLI_RE = re.compile(r"(?:^|[\s;&|(`$])gh\s+[a-z]", re.MULTILINE)
+# ``uses:`` may be written as an absolute URL; only github.com is the implicit
+# default host, so only that prefix is stripped before matching action names.
+GITHUB_URL_PREFIX_RE = re.compile(r"^(?:https?://)?(?:www\.)?github\.com/", re.IGNORECASE)
+
+# a matrix reference expands to at most this many labels, and nested references
+# are followed at most this deep, so that a self-referencing matrix terminates
+MAX_MATRIX_LABELS = 64
+MAX_MATRIX_DEPTH = 8
+GH_CLI_RE = re.compile(r"(?:^|[ \t;&|(`$])gh[ \t]+[a-z]", re.MULTILINE)
 
 ARTIFACT_V4_RE = re.compile(r"^actions/(upload|download)-artifact@v4(\.|$)", re.IGNORECASE)
 
@@ -199,13 +207,31 @@ def _resolve_labels(value: object, matrix: dict) -> list[str]:
         return [v for item in _as_list(value.get("labels")) for v in _resolve_labels(item, matrix)]
     if not isinstance(value, str):
         return []
-    refs = MATRIX_REF_RE.findall(value)
-    if not refs:
+    return _expand_matrix_refs(value, matrix)
+
+
+def _expand_matrix_refs(value: str, matrix: dict, depth: int = 0) -> list[str]:
+    """Substitute every ``${{ matrix.X }}`` reference in ``value``.
+
+    The reference may be the whole string (``${{ matrix.os }}``) or part of one
+    (``ubuntu-${{ matrix.version }}``). A reference the matrix does not define is
+    left as written, so the literal part of the label is still matched.
+    """
+    match = MATRIX_REF_RE.search(value)
+    if match is None or depth >= MAX_MATRIX_DEPTH:
         return [value]
-    resolved: list[str] = []
-    for key in refs:
-        resolved.extend(_matrix_values(matrix, key))
-    return resolved
+    candidates = _matrix_values(matrix, match.group(1))
+    if not candidates:
+        return [value]
+    expanded: list[str] = []
+    for candidate in candidates:
+        substituted = value[: match.start()] + candidate + value[match.end() :]
+        for label in _expand_matrix_refs(substituted, matrix, depth + 1):
+            if label not in expanded:
+                expanded.append(label)
+            if len(expanded) >= MAX_MATRIX_LABELS:
+                return expanded
+    return expanded
 
 
 def _matrix_values(matrix: dict, key: str) -> list[str]:
@@ -217,8 +243,8 @@ def _matrix_values(matrix: dict, key: str) -> list[str]:
     if isinstance(include, list):
         for entry in include:
             entry = _mapping(entry)
-            if key in entry and isinstance(entry[key], str):
-                values.append(entry[key])
+            if isinstance(entry.get(key), (str, int, float)):
+                values.append(str(entry[key]))
     return values
 
 
@@ -231,27 +257,38 @@ def _check_uses(
     emitter: _Emitter,
     seen_unknown: set[str],
 ) -> None:
-    ref = uses.strip()
-    if ref.startswith("./") or ref.startswith("../"):
+    written = uses.strip()  # as it appears in the workflow, for the message
+    if written.startswith("./") or written.startswith("../"):
         return
+    ref = _normalise_action(written)
     action = ref.split("@", 1)[0]
 
     covered = False
     if ARTIFACT_V4_RE.match(ref):
         covered = True
-        emitter.emit("artifact-actions-v4", file, job=job, step=step, uses=ref)
+        emitter.emit("artifact-actions-v4", file, job=job, step=step, uses=written)
     for prefix, rule_id in GITHUB_ONLY_ACTIONS:
         if action == prefix or action.startswith(prefix + "/"):
             covered = True
-            emitter.emit(rule_id, file, job=job, step=step, uses=ref)
+            emitter.emit(rule_id, file, job=job, step=step, uses=written)
             break
 
     if in_container and action.startswith(JS_ACTION_PREFIX):
-        emitter.emit("container-js-action-node", file, job=job, step=step, uses=ref)
+        emitter.emit("container-js-action-node", file, job=job, step=step, uses=written)
 
     if not covered and action not in seen_unknown:
         seen_unknown.add(action)
         emitter.emit("unknown-action", file, job=job, step=step, action=action)
+
+
+def _normalise_action(uses: str) -> str:
+    """Strip the scheme and the implicit ``github.com/`` host from a ``uses:``.
+
+    ``https://github.com/actions/checkout@v4`` and ``github.com/actions/checkout@v4``
+    both mean ``actions/checkout@v4``; any other host is kept as written, because
+    it refers to a different forge.
+    """
+    return GITHUB_URL_PREFIX_RE.sub("", uses)
 
 
 def _check_run(run: str, file: str, job: str, step: int, emitter: _Emitter) -> None:
