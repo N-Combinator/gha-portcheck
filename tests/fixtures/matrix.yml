@@ -1,0 +1,13 @@
+name: matrix
+on: [push]
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [self-hosted, ubuntu-latest]
+        include:
+          - os: windows-2022
+            shell: pwsh
+    steps:
+      - run: echo build

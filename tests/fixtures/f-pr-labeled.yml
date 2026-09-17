@@ -1,0 +1,9 @@
+name: f-pr-labeled
+on:
+  pull_request:
+    types: [opened, labeled, unlabeled]
+jobs:
+  triage:
+    runs-on: self-hosted
+    steps:
+      - run: echo triage

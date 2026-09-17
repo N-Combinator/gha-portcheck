@@ -1,0 +1,8 @@
+name: e-environment
+on: [push]
+jobs:
+  deploy:
+    runs-on: self-hosted
+    environment: production
+    steps:
+      - run: echo deploy
